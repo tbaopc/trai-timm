@@ -3,15 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trái Tim Thủ Khoa Lý</title>
+    <title>Trái Tim Thủ Khoa Lý - Fix Lỗi</title>
     <style>
+        html, body {
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+        }
         canvas {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 1);
         }
     </style>
 </head>
@@ -21,153 +27,147 @@
 
     <script>
         window.requestAnimationFrame =
-            window.__requestAnimationFrame ||
             window.requestAnimationFrame ||
             window.webkitRequestAnimationFrame ||
             window.mozRequestAnimationFrame ||
             window.oRequestAnimationFrame ||
             window.msRequestAnimationFrame ||
-            (function () {
-                return function (callback, element) {
-                    var lastTime = element.__lastTime;
-                    if (lastTime === undefined) {
-                        lastTime = 0;
-                    }
-                    var currTime = Date.now();
-                    var timeToCall = Math.max(1, 33 - (currTime - lastTime));
-                    window.setTimeout(function () {
-                        callback(currTime + timeToCall);
-                    }, timeToCall);
-                    element.__lastTime = currTime + timeToCall;
-                };
-            })();
+            function (callback) {
+                window.setTimeout(callback, 1000 / 60);
+            };
 
-        window.isDevice = (/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(((navigator.userAgent || navigator.vendor || window.opera) + '').toLowerCase()));
-        
-        var loaded = false;
-        var init = function () {
-            if (loaded) return;
-            loaded = true;
-            var mobile = window.isDevice;
-            var koef = mobile ? 0.5 : 1;
-            var canvas = document.getElementById('heart');
-            var ctx = canvas.getContext('2d');
-            var width = canvas.width = window.innerWidth;
-            var height = canvas.height = window.innerHeight;
-            var rand = Math.random;
+        var canvas = document.getElementById('heart');
+        var ctx = canvas.getContext('2d');
+        var width = canvas.width = window.innerWidth;
+        var height = canvas.height = window.innerHeight;
+        var rand = Math.random;
 
-            ctx.fillStyle = "rgba(0,0,0,1)";
+        // Công thức tạo hình trái tim chuẩn toán học
+        function heartPosition(rad) {
+            return [
+                Math.pow(Math.sin(rad), 3),
+                -(15 * Math.cos(rad) - 5 * Math.cos(2 * rad) - 2 * Math.cos(3 * rad) - Math.cos(4 * rad))
+            ];
+        }
+
+        function scaleAndTranslate(pos, sx, sy, dx, dy) {
+            return [dx + pos[0] * sx, dy + pos[1] * sy];
+        }
+
+        window.addEventListener('resize', function () {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, width, height);
+        });
+
+        // Tạo ma trận điểm khung cho trái tim đặc ruột
+        var pointsOrigin = [];
+        var dr = 0.05; // Tăng mật độ điểm để tim dày hơn
+        for (var i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i));
+        for (var i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(v => v * 0.8));
+        for (var i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(v => v * 0.6));
+        for (var i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(v => v * 0.4));
+        for (var i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(v => v * 0.2));
+        for (var i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(v => v * 0.05));
+
+        var heartPointsCount = pointsOrigin.length;
+        var targetPoints = [];
+
+        // Hàm tính toán kích thước nhịp đập
+        function updatePulse(koef) {
+            var targetScale = 12 + koef * 12; // Kích thước trái tim
+            for (var i = 0; i < heartPointsCount; i++) {
+                targetPoints[i] = scaleAndTranslate(pointsOrigin[i], targetScale * 15, targetScale * 15, width / 2, height / 2);
+            }
+        }
+
+        // Tạo các hạt chuyển động
+        var particles = [];
+        var traceCount = 30; // Độ dài vệt sáng đuôi
+
+        for (i = 0; i < heartPointsCount; i++) {
+            // FIX LỖI: Cho hạt xuất hiện ngay tại vị trí trái tim thay vì ngẫu nhiên khắp màn hình
+            updatePulse(0); 
+            var startX = targetPoints[i][0];
+            var startY = targetPoints[i][1];
+
+            particles[i] = {
+                vx: 0,
+                vy: 0,
+                speed: rand() * 3 + 3,
+                q: i, // Gắn mục tiêu chính xác ban đầu
+                D: 2 * (rand() - 0.5),
+                force: 0.15 * rand() + 0.75,
+                // Màu hồng đỏ neon lấp lánh cực đẹp
+                color: "rgba(255, " + ~~(rand() * 40 + 40) + ", " + ~~(rand() * 40 + 100) + ", 0.5)",
+                trace: []
+            };
+            for (var k = 0; k < traceCount; k++) {
+                particles[i].trace[k] = { x: startX, y: startY };
+            }
+        }
+
+        var config = { timeDelta: 0.03 };
+        var time = 0;
+
+        function loop() {
+            var n = -Math.cos(time);
+            updatePulse((1 + n) * 0.5);
+            time += ((n > 0 ? 0.2 : 0.05) * config.timeDelta) + 0.005;
+
+            // Tạo hiệu ứng mờ bóng ma (Aura mờ ảo bao quanh)
+            ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
             ctx.fillRect(0, 0, width, height);
 
-            var heartPosition = function (rad) {
-                return [Math.pow(Math.sin(rad), 3), -(15 * Math.cos(rad) - 5 * Math.cos(2 * rad) - 2 * Math.cos(3 * rad) - Math.cos(4 * rad))];
-            };
+            for (var i = particles.length; i--;) {
+                var p = particles[i];
+                var target = targetPoints[p.q];
+                var dx = p.trace[0].x - target[0];
+                var dy = p.trace[0].y - target[1];
+                var length = Math.sqrt(dx * dx + dy * dy);
 
-            var scaleAndTranslate = function (pos, sx, sy, dx, dy) {
-                return [dx + pos[0] * sx, dy + pos[1] * sy];
-            };
-
-            window.addEventListener('resize', function () {
-                width = canvas.width = window.innerWidth;
-                height = canvas.height = window.innerHeight;
-                ctx.fillStyle = "rgba(0,0,0,1)";
-                ctx.fillRect(0, 0, width, height);
-            });
-
-            var traceCount = mobile ? 20 : 50;
-            var pointsOrigin = [];
-            var i;
-            var dr = 0.1;
-            for (i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i));
-            for (i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(function (v) { return v * 0.7; }));
-            for (i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(function (v) { return v * 0.5; }));
-            for (i = 0; i < Math.PI * 2; i += dr) pointsOrigin.push(heartPosition(i).map(function (v) { return v * 0.3; }));
-
-            var heartPointsCount = pointsOrigin.length;
-            var targetPoints = [];
-
-            var pulse = function (koef, targetPoints) {
-                var targetScale = 10 + koef * 14;
-                for (var i = 0; i < heartPointsCount; i++) {
-                    targetPoints[i] = scaleAndTranslate(pointsOrigin[i], targetScale * 1.5 + 40, targetScale * 1.5, width / 2, height / 2 + 30);
-                }
-            };
-
-            var e = [];
-            for (i = 0; i < heartPointsCount; i++) {
-                var x = rand() * width;
-                var y = rand() * height;
-                e[i] = {
-                    vx: 0,
-                    vy: 0,
-                    R: 2,
-                    speed: rand() + 5,
-                    q: ~~(rand() * heartPointsCount),
-                    D: 2 * (rand() - 0.5),
-                    force: 0.2 * rand() + 0.7,
-                    f: "hsla(0," + ~~(rand() * 100) + "%," + ~~(rand() * 100) + "%,.3)",
-                    trace: []
-                };
-                for (var k = 0; k < traceCount; k++) e[i].trace[k] = { x: x, y: y };
-            }
-
-            var config = {
-                timeDelta: 0.04
-            };
-
-            var time = 0;
-            var loop = function () {
-                var n = -Math.cos(time);
-                pulse((1 + n) * .5, targetPoints);
-                time += ((n > 0 ? 0.2 : 0.05) * config.timeDelta) + 0.005;
-                ctx.fillStyle = "rgba(0,0,0,.1)";
-                ctx.fillRect(0, 0, width, height);
-
-                for (i = e.length; i--;) {
-                    var u = e[i];
-                    var q = targetPoints[u.q];
-                    var dx = u.trace[0].x - q[0];
-                    var dy = u.trace[0].y - q[1];
-                    var length = Math.sqrt(dx * dx + dy * dy);
-                    if (10 > length) {
-                        if (0.95 < rand()) {
-                            u.q = ~~(rand() * heartPointsCount);
-                        } else {
-                            if (0.99 < rand()) {
-                                u.D *= -1;
-                            }
-                            u.q += u.D;
-                            u.q %= heartPointsCount;
-                            if (0 > u.q) {
-                                u.q += heartPointsCount;
-                            }
+                if (10 > length) {
+                    if (0.95 < rand()) {
+                        p.q = ~~(rand() * heartPointsCount);
+                    } else {
+                        if (0.99 < rand()) {
+                            p.D *= -1;
                         }
-                    }
-                    u.vx += -dx / length * u.speed;
-                    u.vy += -dy / length * u.speed;
-                    u.trace[0].x += u.vx;
-                    u.trace[0].y += u.vy;
-                    u.vx *= u.force;
-                    u.vy *= u.force;
-                    for (k = 0; k < u.trace.length - 1;) {
-                        var T = u.trace[k];
-                        var N = u.trace[++k];
-                        N.x -= 0.1 * (N.x - T.x);
-                        N.y -= 0.1 * (N.y - T.y);
-                    }
-                    ctx.fillStyle = u.f;
-                    for (k = 0; k < u.trace.length; k++) {
-                        ctx.fillRect(u.trace[k].x, u.trace[k].y, 1.5, 1.5);
+                        p.q += p.D;
+                        p.q %= heartPointsCount;
+                        if (0 > p.q) p.q += heartPointsCount;
                     }
                 }
-                window.requestAnimationFrame(loop, canvas);
-            };
-            loop();
-        };
 
-        var s = document.readyState;
-        if (s === 'complete' || s === 'loaded' || s === 'interactive') init();
-        else window.addEventListener('DOMContentLoaded', init, false);
+                p.vx += -dx / length * p.speed;
+                p.vy += -dy / length * p.speed;
+                p.trace[0].x += p.vx;
+                p.trace[0].y += p.vy;
+                p.vx *= p.force;
+                p.vy *= p.force;
+
+                for (var k = 0; k < p.trace.length - 1;) {
+                    var T = p.trace[k];
+                    var N = p.trace[++k];
+                    N.x -= 0.15 * (N.x - T.x);
+                    N.y -= 0.15 * (N.y - T.y);
+                }
+
+                ctx.fillStyle = p.color;
+                for (var k = 0; k < p.trace.length; k++) {
+                    ctx.fillRect(p.trace[k].x, p.trace[k].y, 1.5, 1.5);
+                }
+            }
+            requestAnimationFrame(loop);
+        }
+
+        // Đợi mọi thứ sẵn sàng rồi chạy mượt mà
+        setTimeout(function() {
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, width, height);
+            loop();
+        }, 50);
     </script>
 </body>
 </html>
